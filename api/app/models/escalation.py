@@ -21,7 +21,7 @@ Per the locked design decisions for this feature:
 
 The status lifecycle is fixed for v1: ``new`` → ``in_review`` → ``answered``
 → ``closed`` (no custom/configurable workflow states). See migration
-``0064_escalations.py`` for the authoritative DDL and docs/db-schema.md.
+``0065_escalations.py`` for the authoritative DDL and docs/db-schema.md.
 """
 
 from __future__ import annotations

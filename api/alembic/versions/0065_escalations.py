@@ -20,8 +20,8 @@ Design notes baked into this DDL:
   lq-ai account.
 * ``status`` is constrained to the fixed v1 lifecycle; no custom states.
 
-Revision ID: 0064
-Revises: 0063
+Revision ID: 0065
+Revises: 0064
 """
 
 from __future__ import annotations
@@ -32,8 +32,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0064"
-down_revision: str | None = "0063"
+revision: str = "0065"
+down_revision: str | None = "0064"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

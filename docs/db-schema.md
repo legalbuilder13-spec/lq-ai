@@ -1687,12 +1687,12 @@ M3-D3-4), so this table can hold rows for many tenants concurrently.
 
 `installer_oid` is audit-only and grants no LQ.AI permissions.
 
-### `escalations` and `escalation_files` (Legal Escalation Capture, migration 0064)
+### `escalations` and `escalation_files` (Legal Escalation Capture, migration 0065)
 
 Capture substrate for the Legal Escalation Capture feature (Slice A): one
 row per legal question filed from Slack by a non-legal team member, tracked
 for the legal team to answer in a later phase. Capture only — no AI, no
-routing, no answer. Introduced by migration `0064_escalations.py`.
+routing, no answer. Introduced by migration `0065_escalations.py`.
 
 ```sql
 CREATE TABLE escalations (
@@ -1748,11 +1748,11 @@ Attachments reuse the existing `files` table and ingestion pipeline (so a
 later phase can feed them to the citation engine). Both FKs `ON DELETE
 CASCADE`; indexed on `file_id` for reverse lookups.
 
-### `escalation_config` (Legal Escalation Capture on/off, migration 0065)
+### `escalation_config` (Legal Escalation Capture on/off, migration 0066)
 
 The operator's deployment-wide on/off switch for escalation capture (Slice A,
 Phase 5). One legal team per deployment, so one switch — a single row keyed
-`'singleton'`. Introduced by migration `0065_escalation_config.py`.
+`'singleton'`. Introduced by migration `0066_escalation_config.py`.
 
 ```sql
 CREATE TABLE escalation_config (
