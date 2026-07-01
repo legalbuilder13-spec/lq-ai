@@ -193,10 +193,15 @@ def test_governance_and_audit_helpers_do_not_commit() -> None:
 # P1 — one audited egress boundary
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Only this module may construct an outbound HTTP client: it is the backend's
-# single door to the gateway, which is itself the only egress boundary (ADR
-# 0014). Paths are relative to the ``app`` package root.
-_EGRESS_ALLOWLIST: frozenset[str] = frozenset({"clients/gateway.py"})
+# These modules may construct an outbound HTTP client. ``clients/gateway.py``
+# is the single door for *third-party* egress (ADR 0014). ``clients/slack_bridge.py``
+# is a first-party internal call to the operator's own slack-bridge service —
+# never a third party — so it is a distinct audited door, not a hole in P1 (see
+# ADR 0022); P1 forbids calls *outside the operator's own infrastructure*, which
+# the bridge is not. Both are enumerated here so the blunt import-scan cannot
+# mistake either for un-audited third-party egress. Paths are relative to the
+# ``app`` package root.
+_EGRESS_ALLOWLIST: frozenset[str] = frozenset({"clients/gateway.py", "clients/slack_bridge.py"})
 
 # Import forms that pull in a general-purpose outbound HTTP client. Targeted at
 # import statements (not prose) to avoid false positives on words like

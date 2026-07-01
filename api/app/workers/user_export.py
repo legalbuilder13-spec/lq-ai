@@ -51,6 +51,7 @@ from app.db.session import get_session_factory
 from app.models import (
     AuditLog,
     Chat,
+    Escalation,
     File,
     KnowledgeBase,
     Message,
@@ -192,6 +193,29 @@ def _serialize_work_product(row: Any) -> dict[str, Any]:
     }
 
 
+def _serialize_escalation(row: Escalation) -> dict[str, Any]:
+    """Serialize one Escalation (assigned to this user) for the export bundle.
+
+    The requester is a Slack identity, not an lq-ai user, so escalations are
+    scoped to the legal user they are *assigned* to — the only lq-ai-user link.
+    """
+
+    return {
+        "id": str(row.id),
+        "status": row.status,
+        "question": row.question,
+        "links": list(row.links or []),
+        "requester_slack_user_id": row.requester_slack_user_id,
+        "requester_slack_display_name": row.requester_slack_display_name,
+        "slack_channel_id": row.slack_channel_id,
+        "slack_thread_ts": row.slack_thread_ts,
+        "assignee_user_id": str(row.assignee_user_id) if row.assignee_user_id else None,
+        "project_id": str(row.project_id) if row.project_id else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
 _README_TEMPLATE = """\
 # LQ.AI personal data export
 
@@ -215,6 +239,7 @@ original bytes for any files you uploaded.
 - `files/<id>__<name>`   — original bytes for each file.
 - `knowledge_bases.json` — knowledge bases you own.
 - `audit_log.json`       — log of state-changing actions you took.
+- `escalations.json`     — legal escalations assigned to you (active rows).
 - `work_product_attribution.json` — chain-of-custody metadata
                             (PRD §3.3): one row per assistant message you
                             generated, with tier / provider / model /
@@ -355,6 +380,26 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
         zf.writestr(
             "work_product_attribution.json",
             json.dumps([_serialize_work_product(r) for r in attrib_rows], indent=2),
+        )
+
+        # Escalations assigned to this user (the legal user who picked them up;
+        # the requester is a Slack identity, not an lq-ai user). Active rows
+        # only — operator-deleted escalations are redacted and excluded.
+        escalations = (
+            (
+                await session.execute(
+                    select(Escalation).where(
+                        Escalation.assignee_user_id == user.id,
+                        Escalation.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        zf.writestr(
+            "escalations.json",
+            json.dumps([_serialize_escalation(e) for e in escalations], indent=2),
         )
 
         # Skills — empty under M1 (filesystem-canonical per ADR 0004).

@@ -21,7 +21,7 @@ Each audit event is a row in the `audit_log` table (see [docs/db-schema.md §aud
 - `request_id` — correlation id from `X-Request-ID`; cross-references gateway logs and structured app logs.
 - `details` — JSONB payload for action-specific fields (e.g. `{"name": "...", "privileged": true}`); queryable but not indexed by default.
 
-Logged events at M1 (verified against actual `action=` literals emitted by `api/app/`; 42 distinct strings across 53 call sites):
+Logged events (verified against actual `action=` literals emitted by `api/app/`; 47 distinct strings across 57 call sites):
 
 - **Authentication & session:** `user.login`, `user.login_failed`, `user.login_mfa_challenged`, `user.logout`, `user.session_refreshed`, `user.session_refresh_failed`.
 - **MFA lifecycle:** `user.mfa_setup_initiated`, `user.mfa_enabled`, `user.mfa_enable_failed`, `user.mfa_disabled`, `user.mfa_disable_failed`, `user.mfa_verify_failed`.
@@ -35,6 +35,7 @@ Logged events at M1 (verified against actual `action=` literals emitted by `api/
 - **Saved prompts:** `saved_prompt.create`, `saved_prompt.update`, `saved_prompt.delete`.
 - **Teams:** `team.created`, `team.updated`, `team.deleted`, `team.member_added`, `team.member_removed`, `team.member_role_changed`.
 - **Admin / organization:** `organization_profile.updated`, `tier_policy.updated`.
+- **Legal Escalation Capture:** `escalation.created`, `escalation.status_changed`, `escalation.enabled`, `escalation.disabled`, `escalation.deleted`.
 
 All writes go through one helper — `app.audit.audit_action()` in [api/app/audit.py](../../api/app/audit.py) — so every row populates `privilege_marked` / `privilege_basis` consistently and captures `ip_address` / `user_agent` / `request_id` uniformly when a `Request` is available.
 

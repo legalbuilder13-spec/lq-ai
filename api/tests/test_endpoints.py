@@ -75,6 +75,8 @@ _PARAM_VALUES: dict[str, str] = {
     "tool": "read_doc",
     # PR5b Task 7 — resume pending tool call
     "pending_call_id": _DUMMY_UUID,
+    # Legal Escalation Capture (Slice A) — escalation queue surface
+    "escalation_id": _DUMMY_UUID,
 }
 
 
@@ -334,6 +336,19 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/mcp/oauth"),
     # PR5b Task 7 — resume pending tool call
     ("POST", "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}"),
+    # Legal Escalation Capture (Slice A) — escalation queue, Slack intake +
+    # bot-token hand-off, and the admin capture on/off surface. Each has
+    # dedicated coverage (test_escalations_endpoints.py, test_admin_escalations.py,
+    # test_integrations_slack_escalations.py, test_integrations_slack_bot_token.py),
+    # so they must be excluded from this 501-scaffold sweep.
+    ("GET", "/api/v1/escalations"),
+    ("GET", "/api/v1/escalations/{escalation_id}"),
+    ("PATCH", "/api/v1/escalations/{escalation_id}"),
+    ("DELETE", "/api/v1/escalations/{escalation_id}"),
+    ("POST", "/api/v1/integrations/slack/escalations"),
+    ("GET", "/api/v1/integrations/slack/workspaces/{team_id}/bot-token"),
+    ("GET", "/api/v1/admin/escalations"),
+    ("PATCH", "/api/v1/admin/escalations"),
 }
 
 

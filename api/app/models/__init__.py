@@ -27,6 +27,7 @@ from app.models.citation_treatment import CitationTreatment
 from app.models.citation_treatment_signal import CitationTreatmentSignal
 from app.models.document import Document, DocumentChunk
 from app.models.enhance_prompt import EnhancePromptInteraction
+from app.models.escalation import Escalation, EscalationConfig, EscalationFile
 from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
@@ -69,6 +70,9 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "EnhancePromptInteraction",
+    "Escalation",
+    "EscalationConfig",
+    "EscalationFile",
     "File",
     "InferenceRoutingLog",
     "KnowledgeBase",

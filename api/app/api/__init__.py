@@ -32,6 +32,7 @@ from app.api import (
     chat_receipts,
     chats,
     enhance_prompt,
+    escalations,
     files,
     inference,
     inference_override,
@@ -102,6 +103,10 @@ api_router.include_router(files.router, dependencies=_active)
 api_router.include_router(knowledge_bases.router, dependencies=_active)
 api_router.include_router(organization_profile.router, dependencies=_active)
 api_router.include_router(saved_prompts.router, dependencies=_active)
+# Legal Escalation Capture (Slice A): the legal team's read/list/status surface
+# over the escalation queue. Mounted under _active (bearer + must-change-password
+# gate); PATCH additionally requires a mutating (non-viewer) role at the handler.
+api_router.include_router(escalations.router, dependencies=_active)
 api_router.include_router(user_skills.router, dependencies=_active)
 api_router.include_router(teams.user_router, dependencies=_active)
 api_router.include_router(teams.admin_router, dependencies=_active)

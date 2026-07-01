@@ -45,10 +45,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import AdminUser
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
+from app.escalation_config import get_escalation_enabled, set_escalation_enabled
 from app.models.audit import AuditLog
 from app.models.document import Document as DocumentORM
 from app.models.file import File as FileORM
 from app.models.user import User as UserORM
+from app.schemas.escalation import EscalationCaptureStatus, EscalationCaptureToggle
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -335,6 +337,64 @@ async def update_tier_policy(
         await db.commit()
 
     return after
+
+
+# ---------------------------------------------------------------------------
+# Legal Escalation Capture — deployment-wide on/off switch (Slice A, Phase 5)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/escalations", response_model=EscalationCaptureStatus)
+async def get_escalation_capture_status(
+    _admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> EscalationCaptureStatus:
+    """GET /api/v1/admin/escalations — whether escalation capture is enabled.
+
+    Read-only operator view of the deployment-wide on/off switch. Fail-safe:
+    an unconfigured deployment reports ``enabled: false``. Disabling capture
+    blocks only *new* escalations — the legal team can still read and work the
+    existing queue.
+    """
+
+    return EscalationCaptureStatus(enabled=await get_escalation_enabled(db))
+
+
+@router.patch("/escalations", response_model=EscalationCaptureStatus)
+async def set_escalation_capture_status(
+    body: EscalationCaptureToggle,
+    admin: AdminUser,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> EscalationCaptureStatus:
+    """PATCH /api/v1/admin/escalations — turn escalation capture on or off.
+
+    Deployment-wide switch (single legal team per deployment). Writes an
+    ``escalation.enabled`` / ``escalation.disabled`` audit row carrying only
+    the new value — never any escalation content (P3) — atomically with the
+    state change (P5).
+    """
+
+    from app.audit import audit_action
+
+    # No-op toggle (already in the requested state) writes no audit row, mirroring
+    # update_escalation's no-op handling and the tier-policy before/after guard —
+    # so repeated identical toggles don't inflate the audit trail.
+    if await get_escalation_enabled(db) == body.enabled:
+        return EscalationCaptureStatus(enabled=body.enabled)
+
+    updated = await set_escalation_enabled(db, enabled=body.enabled)
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="escalation.enabled" if body.enabled else "escalation.disabled",
+        resource_type="escalation_config",
+        resource_id="singleton",
+        request=request,
+        details={"enabled": body.enabled},
+    )
+    await db.commit()
+    return EscalationCaptureStatus(enabled=updated)
 
 
 # ---------------------------------------------------------------------------
