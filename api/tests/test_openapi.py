@@ -216,6 +216,13 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/mcp/oauth",
         # PR5b Task 7 — resume pending tool call
         "/api/v1/chats/{chat_id}/tool-calls/{pending_call_id}",
+        # Legal Escalation Capture (Slice A) — escalation queue, Slack intake +
+        # bot-token hand-off, and the admin capture on/off surface.
+        "/api/v1/escalations",
+        "/api/v1/escalations/{escalation_id}",
+        "/api/v1/integrations/slack/escalations",
+        "/api/v1/integrations/slack/workspaces/{team_id}/bot-token",
+        "/api/v1/admin/escalations",
     }
 )
 
@@ -336,7 +343,13 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/autonomous/sessions/{session_id}/ledger
     # WS-E PR1a adds one new path (136 -> 137):
     # /api/v1/research/sources
-    assert len(actual) == 137
+    # Legal Escalation Capture (Slice A) adds five new paths (137 -> 142):
+    # /api/v1/escalations
+    # /api/v1/escalations/{escalation_id}
+    # /api/v1/integrations/slack/escalations
+    # /api/v1/integrations/slack/workspaces/{team_id}/bot-token
+    # /api/v1/admin/escalations
+    assert len(actual) == 142
 
 
 @pytest.mark.unit
