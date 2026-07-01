@@ -296,6 +296,22 @@ async def test_patch_changes_status_and_audits(
     assert "question" not in details
 
 
+@pytest.mark.unit
+def test_escalations_updated_at_bumps_on_update() -> None:
+    """Regression: ``escalations.updated_at`` must re-stamp on every UPDATE.
+
+    It was first declared with ``server_default=now()`` but no ``onupdate=``,
+    so a status change left ``updated_at`` frozen at insert time and the
+    queue's "last touched" was meaningless. Every other mutable table in the
+    codebase bumps ``updated_at`` via ``onupdate``; this guards the escalation
+    model against regressing to insert-only stamping.
+    """
+
+    assert Escalation.__table__.c.updated_at.onupdate is not None, (
+        "escalations.updated_at must set onupdate= so it re-stamps on every UPDATE"
+    )
+
+
 @pytest.mark.integration
 async def test_patch_rejects_invalid_status(
     client: AsyncClient, db_session: AsyncSession, member: User

@@ -106,6 +106,7 @@ class Escalation(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=text("now()"),
+        onupdate=text("now()"),
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
