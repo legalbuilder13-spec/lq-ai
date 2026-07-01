@@ -368,6 +368,16 @@ class Settings(BaseSettings):
             "tokens at rest (and any future bridge-issued secret)."
         ),
     )
+    lq_ai_bridge_url: str = Field(
+        default="http://slack-bridge:8002",
+        description=(
+            "Base URL of the slack-bridge service. The backend dials this to "
+            "ask the bridge to post escalation status updates into a Slack "
+            "thread (Phase 4) — a first-party internal call, never third-party "
+            "egress (ADR 0022). Defaults to the compose service address; only "
+            "used when the `slack` profile is running."
+        ),
+    )
 
     # ----- Chat tool-loop (PR5b / L4) -----
     # Hard cap on tool-call rounds per chat turn. Once calls_used reaches this

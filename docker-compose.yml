@@ -208,6 +208,10 @@ services:
       # bridge traffic with 500 when either is unset.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
       LQ_AI_BRIDGE_MASTER_KEY: ${LQ_AI_BRIDGE_MASTER_KEY:-}
+      # Phase 4: where the backend dials the slack-bridge to post escalation
+      # status updates (a first-party internal call; ADR 0022). Defaults to the
+      # compose service address; only used when the `slack` profile is up.
+      LQ_AI_BRIDGE_URL: ${LQ_AI_BRIDGE_URL:-http://slack-bridge:8002}
     volumes:
       - ./skills:/skills:ro
     ports:
