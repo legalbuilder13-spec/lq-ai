@@ -27,17 +27,28 @@ its secret surface stays minimal.
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_bridge_auth
+from app.api.escalations import create_escalation
 from app.config import Settings, get_settings
 from app.db.session import get_db
+from app.escalation_config import get_escalation_enabled
 from app.models.slack_workspace import SlackWorkspace
-from app.schemas.slack_workspace import SlackWorkspaceCreate, SlackWorkspaceResponse
+from app.schemas.escalation import (
+    EscalationCreate,
+    EscalationIntakeResponse,
+    EscalationStatus,
+)
+from app.schemas.slack_workspace import (
+    SlackBotTokenResponse,
+    SlackWorkspaceCreate,
+    SlackWorkspaceResponse,
+)
 from app.security.encryption import BridgeTokenEncryptor
 
 log = logging.getLogger(__name__)
@@ -105,3 +116,110 @@ async def upsert_slack_workspace(
     await db.commit()
     await db.refresh(workspace)
     return SlackWorkspaceResponse.model_validate(workspace)
+
+
+@router.post(
+    "/escalations",
+    response_model=EscalationIntakeResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_bridge_auth)],
+)
+async def create_slack_escalation(
+    body: EscalationCreate,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> EscalationIntakeResponse:
+    """Create a tracked escalation from a verified Slack submission (Phase 3a).
+
+    The slack-bridge has already verified the Slack request signature and the
+    requester identity before calling this. We resolve the (active) workspace
+    from ``team_id``, create the escalation + its audit row, and return the
+    record id so the bridge can post a confirmation into the thread. Slack
+    egress stays in the bridge per invariant P1 — this endpoint never calls
+    Slack.
+    """
+
+    # Fail closed FIRST (before any work): the operator's deployment-wide
+    # capture switch. Disabling capture refuses NEW escalations; the existing
+    # queue is untouched (read/list/status still work). A missing config row
+    # reads as disabled (Phase 5).
+    if not await get_escalation_enabled(db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="escalation capture is disabled",
+        )
+
+    workspace = (
+        await db.execute(
+            select(SlackWorkspace).where(
+                SlackWorkspace.team_id == body.team_id,
+                SlackWorkspace.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="slack workspace not connected",
+        )
+
+    escalation = await create_escalation(
+        db,
+        slack_workspace_id=workspace.id,
+        requester_slack_user_id=body.requester_slack_user_id,
+        requester_slack_display_name=body.requester_slack_display_name,
+        slack_channel_id=body.slack_channel_id,
+        slack_thread_ts=body.slack_thread_ts,
+        question=body.question,
+        links=body.links,
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(escalation)
+    return EscalationIntakeResponse(
+        id=escalation.id,
+        # DB check-constraint guarantees a valid lifecycle state.
+        status=cast(EscalationStatus, escalation.status),
+        slack_thread_ts=escalation.slack_thread_ts,
+    )
+
+
+@router.get(
+    "/workspaces/{team_id}/bot-token",
+    response_model=SlackBotTokenResponse,
+    dependencies=[Depends(require_bridge_auth)],
+)
+async def get_slack_bot_token(
+    team_id: str,
+    settings: Annotated[Settings, Depends(get_settings)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SlackBotTokenResponse:
+    """Hand the slack-bridge the decrypted bot token for a workspace (bridge-auth).
+
+    Invariant P1: the backend never calls Slack, so the bridge performs all
+    Slack egress and needs the workspace bot token at call time. The token is
+    decrypted here from its at-rest ciphertext for the trusted internal
+    channel only; the plaintext is never logged.
+    """
+
+    workspace = (
+        await db.execute(
+            select(SlackWorkspace).where(
+                SlackWorkspace.team_id == team_id,
+                SlackWorkspace.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="slack workspace not connected",
+        )
+
+    encryptor = BridgeTokenEncryptor(master_key=settings.lq_ai_bridge_master_key or None)
+    bot_token = encryptor.decrypt(workspace.bot_token_encrypted)
+    return SlackBotTokenResponse(
+        team_id=workspace.team_id,
+        bot_user_id=workspace.bot_user_id,
+        bot_token=bot_token,
+    )

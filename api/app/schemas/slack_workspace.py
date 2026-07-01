@@ -67,3 +67,18 @@ class SlackWorkspaceResponse(BaseModel):
     installer_slack_user_id: str
     scope: str
     installed_at: datetime
+
+
+class SlackBotTokenResponse(BaseModel):
+    """Decrypted bot token handed to the slack-bridge (bridge-auth only).
+
+    Invariant P1: the backend never calls Slack, so the bridge performs all
+    Slack egress (opening the intake modal, posting confirmations / status
+    updates) and needs the workspace bot token at call time. The token is
+    encrypted at rest; this shape carries the decrypted value over the
+    trusted internal bridge channel only and is never logged.
+    """
+
+    team_id: str
+    bot_user_id: str
+    bot_token: str

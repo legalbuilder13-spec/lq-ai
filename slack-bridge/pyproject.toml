@@ -45,6 +45,11 @@ dependencies = [
     # every OAuth callback uses the async client, so an unpinned
     # missing-aiohttp is a runtime crash on first install.
     "aiohttp>=3.10,<4",
+    # python-multipart: required by Starlette to parse the form-encoded
+    # requests Slack sends for slash commands (/slack/commands) and
+    # interactive-component submissions (/slack/interactivity). Without it
+    # `request.form()` raises at request time. Same pin as api/.
+    "python-multipart>=0.0.20,<0.1",
     # OpenTelemetry — mirrors api/ + gateway/ so the bridge participates
     # in the M1 OTel substrate from day one. The deepening work in
     # M3 Phase F (per docs/proposals/opentelemetry-deepening.md) will
