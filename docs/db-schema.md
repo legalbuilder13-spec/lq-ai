@@ -1687,6 +1687,91 @@ M3-D3-4), so this table can hold rows for many tenants concurrently.
 
 `installer_oid` is audit-only and grants no LQ.AI permissions.
 
+### `escalations` and `escalation_files` (Legal Escalation Capture, migration 0064)
+
+Capture substrate for the Legal Escalation Capture feature (Slice A): one
+row per legal question filed from Slack by a non-legal team member, tracked
+for the legal team to answer in a later phase. Capture only — no AI, no
+routing, no answer. Introduced by migration `0064_escalations.py`.
+
+```sql
+CREATE TABLE escalations (
+    id                            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slack_workspace_id            UUID NOT NULL REFERENCES slack_workspaces(id) ON DELETE RESTRICT,  -- source workspace; used to post back via its bot token
+    requester_slack_user_id       TEXT NOT NULL,                          -- verified Slack identity of who filed it; NOT an lq-ai user
+    requester_slack_display_name  TEXT,                                   -- snapshotted display name for human reading
+    slack_channel_id              TEXT NOT NULL,                          -- channel the escalation was filed in
+    slack_thread_ts               TEXT NOT NULL,                          -- thread to keep in sync (confirmations, status updates)
+    question                      TEXT NOT NULL,                          -- the legal question (CHECK length > 0)
+    links                         JSONB,                                  -- related URLs the requester supplied (array of strings)
+    status                        TEXT NOT NULL DEFAULT 'new',            -- fixed lifecycle: new | in_review | answered | closed
+    assignee_user_id              UUID REFERENCES users(id) ON DELETE SET NULL,    -- legal user who picked it up; SET NULL anonymizes on user deletion
+    project_id                    UUID REFERENCES projects(id) ON DELETE SET NULL, -- optional matter scope; drives audit privilege marking
+    created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at                    TIMESTAMPTZ,                            -- soft-delete; operator deletion-on-request sets it and redacts content
+
+    CONSTRAINT chk_escalations_status CHECK (status IN ('new', 'in_review', 'answered', 'closed')),
+    CONSTRAINT chk_escalations_question_nonempty CHECK (char_length(question) > 0)
+);
+```
+
+Indexes: `ix_escalations_status`, `ix_escalations_slack_workspace_id`,
+`ix_escalations_slack_thread_ts` (resolve the escalation for an inbound
+thread on a status-update post), partial `ix_escalations_assignee_user_id`
+and `ix_escalations_project_id` (`WHERE … IS NOT NULL`), and partial
+`ix_escalations_active_created_at` (`created_at DESC WHERE deleted_at IS NULL`)
+for the queue list.
+
+The **requester is the verified Slack identity**, not an lq-ai account
+(per-user Slack↔lq-ai binding is separate, unbuilt work). The **owning
+legal team** is the single legal team per deployment; queue visibility is
+enforced at the route layer, not encoded here. When `project_id` points at
+a privileged matter, audit rows for the escalation inherit the privilege
+marking via `audit_action`'s project lookup (see
+[security/audit-logging.md](security/audit-logging.md)). `slack_workspace_id`
+is `ON DELETE RESTRICT` so a workspace with live escalations cannot be
+hard-deleted; `assignee_user_id` and `project_id` are `ON DELETE SET NULL`
+so the escalation outlives the user/matter it references.
+
+```sql
+CREATE TABLE escalation_files (
+    escalation_id  UUID NOT NULL REFERENCES escalations(id) ON DELETE CASCADE,
+    file_id        UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    attached_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT pk_escalation_files PRIMARY KEY (escalation_id, file_id)
+);
+```
+
+Attachments reuse the existing `files` table and ingestion pipeline (so a
+later phase can feed them to the citation engine). Both FKs `ON DELETE
+CASCADE`; indexed on `file_id` for reverse lookups.
+
+### `escalation_config` (Legal Escalation Capture on/off, migration 0065)
+
+The operator's deployment-wide on/off switch for escalation capture (Slice A,
+Phase 5). One legal team per deployment, so one switch — a single row keyed
+`'singleton'`. Introduced by migration `0065_escalation_config.py`.
+
+```sql
+CREATE TABLE escalation_config (
+    id       TEXT NOT NULL PRIMARY KEY DEFAULT 'singleton',
+    enabled  BOOLEAN NOT NULL DEFAULT false,                 -- fail-safe: capture OFF by default
+
+    CONSTRAINT chk_escalation_config_singleton CHECK (id = 'singleton')
+);
+```
+
+Fail-safe by design (invariant P4 / operator control P8): `enabled` defaults to
+`false`, and the application reads a **missing row as disabled**
+(`app/escalation_config.py`), so a fresh deployment never captures escalations
+until an operator turns it on via `PATCH /api/v1/admin/escalations`. The
+`id = 'singleton'` check keeps it a true singleton. The on/off *action* is
+recorded in `audit_log` (`escalation.enabled` / `escalation.disabled`); this
+table holds only the current state. Disabling capture refuses *new* escalations
+at intake (HTTP 403); the existing queue stays readable and workable.
+
 ## Autonomous layer (per [PRD §3.10](PRD.md#310-autonomous-layer-m4), M4)
 
 The per-user Autonomous agent's data substrate (migration
